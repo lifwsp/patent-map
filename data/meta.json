@@ -1,4 +1,22 @@
 {
+ "data_as_of": "2026-09-04",
+ "coverage": {
+  "2020": 1.0,
+  "2021": 1.0,
+  "2022": 1.0,
+  "2023": 1.0,
+  "2024": 0.895,
+  "2025": 0.24
+ },
+ "official_apps": {
+  "2020": 288472,
+  "2021": 289200,
+  "2022": 289530,
+  "2023": 300133,
+  "2024": 306855,
+  "2025": 358317
+ },
+ "official_source": "特許庁 特許行政年次報告書（2026年版ほか）",
  "source": "Google Patents Public Datasets (patents-public-data.patents.publications, CC BY 4.0)",
  "field_source": "WIPO IPC-Technology Concordance (35 fields)",
  "scope": "日本の特許出願（出願日 2015-01-01 以降）",

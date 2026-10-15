@@ -24,6 +24,45 @@ function chart(el, option) {
 }
 window.addEventListener("resize", () => charts.forEach((c) => c.resize()));
 
+
+// ---------------------------------------------------------------- 年次グラフ（未公開分の推計つき）
+// 収録率 = 公式の出願件数に対する、データに入っている割合（基準年で補正）。1 未満の年は公開待ちで欠けている。
+let META = null;
+const coverageOf = (y) => (META?.coverage?.[y] ?? 1);
+// 収録率が半分未満の年は推計が不安定なため表示しない
+const MIN_COVERAGE = 0.5;
+const chartYears = (by) => Object.keys(by).map(Number)
+  .filter((y) => y >= 2015 && (y <= 2023 || META?.coverage?.[y] !== undefined) && coverageOf(y) >= MIN_COVERAGE).sort();
+function yearChart(el, by, color) {
+  const years = chartYears(by);
+  const apps = years.map((y) => by[y]?.apps || 0);
+  const est = years.map((y, i) => (coverageOf(y) < 1 ? Math.round(apps[i] / coverageOf(y)) : null));
+  chart(el, {
+    tooltip: { trigger: "axis", formatter: (ps) => {
+      const i = ps[0].dataIndex, y = years[i], c = coverageOf(y);
+      return `<b>${y}年</b><br>出願（収録済み）: ${fmt(apps[i])}件<br>うち登録: ${fmt(by[y]?.granted || 0)}件` +
+        (c < 1 ? `<br><span style="color:#888">年間の推計: 約${fmt(est[i])}件<br>（収録率 ${(c * 100).toFixed(0)}%。残りは公開待ち）</span>` : ""); } },
+    grid: { left: 60, right: 20, top: 30, bottom: 30 },
+    legend: { data: ["出願", "うち登録", "年間の推計（公開待ちを含む）"], right: 0 },
+    xAxis: { type: "category", data: years.map((y) => (coverageOf(y) < 1 ? `${y}*` : `${y}`)) },
+    yAxis: { type: "value" },
+    series: [
+      { name: "年間の推計（公開待ちを含む）", type: "bar", data: est, z: 1,
+        itemStyle: { color: "rgba(140,146,156,.22)", borderColor: "#9aa1ab", borderType: "dashed", borderWidth: 1 } },
+      { name: "出願", type: "bar", barGap: "-100%", z: 2, data: apps, itemStyle: { color } },
+      { name: "うち登録", type: "bar", barGap: "-100%", z: 3, data: years.map((y) => by[y]?.granted || 0), itemStyle: { color: "rgba(0,0,0,.18)" } },
+    ],
+  });
+}
+function coverageNote() {
+  const partial = Object.entries(META?.coverage || {}).filter(([, c]) => c < 1 && c >= MIN_COVERAGE);
+  const hidden = Object.entries(META?.coverage || {}).filter(([, c]) => c < MIN_COVERAGE).map(([y]) => y);
+  if (!partial.length) return "";
+  return `<p class="note">* の年は出願から公開まで約1年半かかるため、まだ全件がそろっていません（${partial.map(([y, c]) => `${y}年: 約${(c * 100).toFixed(0)}%`).join("、")}。データ時点 ${esc(META.data_as_of)}）。
+    灰色の点線は、収録率で割り戻した年間の推計値です（全分野で収録率が同じと仮定した概算）。
+    ${hidden.length ? `${hidden.join("・")}年はまだ収録が半分未満のため表示していません。` : ""}</p>`;
+}
+
 // ---------------------------------------------------------------- 技術分野マップ
 async function viewFields() {
   const [fields, meta] = await Promise.all([load("fields.json"), load("meta.json")]);
@@ -69,7 +108,6 @@ async function viewField(id) {
   const [fields, companies] = await Promise.all([load("fields.json"), load("companies.json")]);
   const f = fields.find((x) => x.id === +id);
   const byName = Object.fromEntries(companies.map((c) => [c.name, c.id]));
-  const years = Object.keys(f.by_year).map(Number).filter((y) => y <= 2024).sort();
   const link = (n) => byName[n] ? `<a href="#/company/${byName[n]}">${esc(n)}</a>` : esc(n);
   $app.innerHTML = `
     <p><a href="#/">← 技術分野マップ</a></p>
@@ -81,7 +119,7 @@ async function viewField(id) {
     </div>
     <div class="grid">
       <div class="card span-12"><h2>出願件数の推移</h2><div id="ts" class="chart short"></div>
-        <p class="note">2024年以降は出願後1年半の未公開期間があるため、件数が少なく見えます。</p></div>
+        ${coverageNote()}</div>
       <div class="card span-12"><h2>細分野（${f.subclasses.filter((x) => x.total > 0).length}）</h2>
         <p class="note">IPCサブクラス単位。面積は出願件数（2015–2023年）、色は成長率（緑=伸びている／赤=減っている）。クリックで詳細を開きます。</p>
         <div id="subtm" class="chart"></div>
@@ -95,16 +133,7 @@ async function viewField(id) {
         ${f.new_entrants.map((a) => `<tr><td>${link(a.name)}</td><td class="num">${fmt(a.apps)}</td></tr>`).join("") || `<tr><td colspan=2 class="note">該当なし</td></tr>`}
       </table></div>
     </div>`;
-  chart(document.getElementById("ts"), {
-    tooltip: { trigger: "axis" }, grid: { left: 60, right: 20, top: 20, bottom: 30 },
-    legend: { data: ["出願", "うち登録"], right: 0 },
-    xAxis: { type: "category", data: years },
-    yAxis: { type: "value" },
-    series: [
-      { name: "出願", type: "bar", data: years.map((y) => f.by_year[y]?.apps || 0), itemStyle: { color: AREA_COLOR[f.area] } },
-      { name: "うち登録", type: "bar", barGap: "-100%", data: years.map((y) => f.by_year[y]?.granted || 0), itemStyle: { color: "rgba(0,0,0,.18)" } },
-    ],
-  });
+  yearChart(document.getElementById("ts"), f.by_year, AREA_COLOR[f.area]);
   growthTreemap(document.getElementById("subtm"), f.subclasses.map((x) => ({ name: x.name, value: x.total, code: x.code, g: cagrSimple(x.by_year) })),
     (d) => (location.hash = `#/topic/${d.code}`));
   bindRowLinks();
@@ -150,7 +179,6 @@ async function viewTopic(code) {
   const f = fields.find((x) => x.id === t.field);
   const byName = Object.fromEntries(companies.map((c) => [c.name, c.id]));
   const link = (n) => byName[n] ? `<a href="#/company/${byName[n]}">${esc(n)}</a>` : esc(n);
-  const years = Object.keys(t.by_year).map(Number).filter((y) => y <= 2024).sort();
   const total = sumYears(t.by_year, FULL_YEARS);
   $app.innerHTML = `
     <p><a href="#/">技術分野マップ</a> › <a href="#/field/${f.id}">${esc(f.name)}</a></p>
@@ -162,7 +190,7 @@ async function viewTopic(code) {
       <div class="kpi"><div class="v">${t.groups.length}</div><div class="l">主要な技術グループ</div></div>
     </div>
     <div class="grid">
-      <div class="card span-12"><h2>出願件数の推移</h2><div id="ts" class="chart short"></div></div>
+      <div class="card span-12"><h2>出願件数の推移</h2><div id="ts" class="chart short"></div>${coverageNote()}</div>
       ${t.groups.length ? `<div class="card span-12"><h2>技術グループ</h2>
         <p class="note">IPCメイングループ単位（出願100件以上）。説明は英語の分類タイトルです。色は成長率。</p>
         <div id="gtm" class="chart"></div>
@@ -180,14 +208,7 @@ async function viewTopic(code) {
         ${t.new_entrants.map((a) => `<tr><td>${link(a.name)}</td><td class="num">${fmt(a.apps)}</td></tr>`).join("") || `<tr><td colspan=2 class="note">該当なし</td></tr>`}
       </table></div>
     </div>`;
-  chart(document.getElementById("ts"), {
-    tooltip: { trigger: "axis" }, grid: { left: 60, right: 20, top: 20, bottom: 30 },
-    xAxis: { type: "category", data: years }, yAxis: { type: "value" },
-    series: [
-      { name: "出願", type: "bar", data: years.map((y) => t.by_year[y]?.apps || 0), itemStyle: { color: AREA_COLOR[f.area] } },
-      { name: "うち登録", type: "bar", barGap: "-100%", data: years.map((y) => t.by_year[y]?.granted || 0), itemStyle: { color: "rgba(0,0,0,.18)" } },
-    ],
-  });
+  yearChart(document.getElementById("ts"), t.by_year, AREA_COLOR[f.area]);
   if (t.groups.length) growthTreemap(document.getElementById("gtm"),
     t.groups.map((g) => ({ name: g.code + " " + (g.title.split(";")[0] || "").slice(0, 40), value: Object.values(g.by_year).reduce((a, b) => a + b, 0), code: g.code, g: cagrSimple(g.by_year) })), () => {});
 }
@@ -239,7 +260,11 @@ async function viewCompany(id) {
   const [c, fields, companies] = await Promise.all([load(`companies/${id}.json`), load("fields.json"), load("companies.json")]);
   const F = Object.fromEntries(fields.map((f) => [f.id, f]));
   const byName = Object.fromEntries(companies.map((x) => [x.name, x.id]));
-  const years = [...new Set(c.field_year.map((r) => r.year))].filter((y) => y <= 2024).sort();
+  const years = [...new Set(c.field_year.map((r) => r.year))].filter((y) => y >= 2015 && (y <= 2023 || META?.coverage?.[y] !== undefined) && coverageOf(y) >= MIN_COVERAGE).sort();
+  const partial = years.filter((y) => coverageOf(y) < 1);
+  const band = partial.length ? { silent: true, itemStyle: { color: "rgba(140,146,156,.15)" },
+    label: { show: true, position: "insideTop", color: "#888", fontSize: 10, formatter: "公開待ちあり" },
+    data: [[{ xAxis: String(partial[0]) }, { xAxis: String(partial[partial.length - 1]) }]] } : undefined;
   const topF = c.fields.slice(0, 8).map((x) => x.field);
   $app.innerHTML = `
     <p><a href="#/companies">← 企業一覧</a></p>
@@ -274,15 +299,16 @@ async function viewCompany(id) {
   });
   chart(document.getElementById("st"), {
     tooltip: { trigger: "axis" }, legend: { type: "scroll", bottom: 0 }, grid: { left: 50, right: 10, top: 10, bottom: 50 },
-    xAxis: { type: "category", data: years }, yAxis: { type: "value" },
-    series: topF.map((fid) => ({ name: F[fid].name, type: "line", stack: "s", areaStyle: {}, symbol: "none",
+    xAxis: { type: "category", data: years.map(String) }, yAxis: { type: "value" },
+    series: topF.map((fid, k) => ({ name: F[fid].name, type: "line", stack: "s", areaStyle: {}, symbol: "none", markArea: k === 0 ? band : undefined,
       data: years.map((y) => c.field_year.find((r) => r.field === fid && r.year === y)?.apps || 0) })),
   });
   chart(document.getElementById("team"), {
     tooltip: { trigger: "axis" }, grid: { left: 50, right: 10, top: 10, bottom: 30 },
-    xAxis: { type: "category", data: c.team.filter((t) => t.year <= 2024).map((t) => t.year) },
+    xAxis: { type: "category", data: c.team.filter((t) => years.includes(t.year)).map((t) => String(t.year)) },
     yAxis: { type: "value", name: "人" },
-    series: [{ type: "bar", data: c.team.filter((t) => t.year <= 2024).map((t) => t.unique_inventors), itemStyle: { color: "#13a89e" } }],
+    series: [{ type: "bar", markArea: band, data: c.team.filter((t) => years.includes(t.year)).map((t) => ({ value: t.unique_inventors,
+      itemStyle: { color: coverageOf(t.year) < 1 ? "rgba(19,168,158,.45)" : "#13a89e" } })), itemStyle: { color: "#13a89e" } }],
   });
   bindRowLinks();
 }
@@ -367,7 +393,9 @@ async function viewAbout() {
       <p><b>出願人名</b>: データセットの英語の統一表記（harmonized name）をそのまま使っています。グループ会社の名寄せはまだ行っていません。</p>
       <p><b>注意点</b></p>
       <ul>
-        <li>出願は公開されるまで（通常は出願から1年半）データに含まれません。2024年以降の件数は少なく見えます。</li>
+        <li>出願は公開されるまで（通常は出願から1年半）データに含まれません。データ時点は ${esc(meta.data_as_of)} です。
+          各年の収録率: ${Object.entries(meta.coverage).map(([y, c]) => `${y}年 ${(c * 100).toFixed(0)}%`).join("、")}。
+          収録率は ${esc(meta.official_source)} の出願件数と比べて算出しています（国際出願の国内移行などで、完全な年でも公式件数の約9割が収録上限です）。</li>
         <li>出願人の情報は、公開公報（A）がある出願の約75%についてのみ取得できています。</li>
         <li>研究開発規模の人数は、英語表記の発明者名で重複を除いて数えた概算です。</li>
         <li>本サイトは集計値のみを表示しています。発明者個人の情報は掲載していません。</li>
@@ -377,6 +405,7 @@ async function viewAbout() {
 
 // ---------------------------------------------------------------- ルーター
 async function route() {
+  META ||= await load("meta.json");
   charts.forEach((c) => c.dispose()); charts.length = 0;
   const [, page, arg] = location.hash.split("/");
   document.querySelectorAll("nav a").forEach((a) => a.classList.toggle("active",
