@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>技術マップ — 日本の特許出願で見る企業と技術分野</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js" defer></script>
+<script src="app.js" defer></script>
+</head>
+<body>
+<header>
+  <a class="brand" href="#/">技術マップ <small>β</small></a>
+  <nav>
+    <a href="#/" data-nav="fields">技術分野</a>
+    <a href="#/companies" data-nav="companies">企業</a>
+    <a href="#/compare" data-nav="compare">比較</a>
+    <a href="#/network" data-nav="network">共同出願</a>
+    <a href="#/about" data-nav="about">データについて</a>
+  </nav>
+  <form id="search" class="search"><input type="search" name="q" placeholder="技術・企業・IPCを検索（例: 電池, H01M, CANON）"></form>
+</header>
+<main id="app"><p class="loading">読み込み中…</p></main>
+<footer>
+  出典: Google Patents Public Datasets（CC BY 4.0）、WIPO IPC-Technology Concordance。
+  本サイトは集計値のみを表示し、発明者個人の情報は掲載していません。
+</footer>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+ "source": "Google Patents Public Datasets (patents-public-data.patents.publications, CC BY 4.0)",
+ "field_source": "WIPO IPC-Technology Concordance (35 fields)",
+ "scope": "日本の特許出願（出願日 2015-01-01 以降）",
+ "applications": 2704648,
+ "areas": {
+  "I": "電気工学",
+  "II": "計測・制御・医療機器",
+  "III": "化学",
+  "IV": "機械工学",
+  "V": "その他"
+ }
+}
